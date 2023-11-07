@@ -1,38 +1,78 @@
 from collections import namedtuple
-import altair as alt
 import math
 import pandas as pd
 import streamlit as st
+import pandas as pd
+from io import BytesIO
+from garmin_fit_sdk import Decoder, Stream
 
+ 
+
+st.set_page_config(
+    page_title="Driftline",
+    page_icon="https://www.driftline.io/favicon.ico",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://www.driftline.io/',
+        'Report a bug': "https://www.driftline.io/contact",
+        'About': "# Made by Driftline https://www.driftline.io/"
+    }
+)
+
+st.markdown(
+'''
+<style>
+.block-container{
+        padding-top: 1rem !important;
+        padding-bottom: 5rem !important;
+    }
+</style>
+''',
+    unsafe_allow_html=True,
+)
 """
-# Welcome to Streamlit!
-
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
+### Driftline .fit to .xslx converter
 """
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5, 2)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+def main():
+    st.session_state['excel'] = pd.DataFrame([1,2,3])
+    st.session_state['uploaded'] = False
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+    uploaded_file = st.file_uploader(label = "Fit file uploader", type='.fit')
+    if uploaded_file is not None:
+        # To read file as bytes:
+        try:
+            stream = Stream.from_bytes_io(uploaded_file)
+            decoder = Decoder(stream)
+            messages, _ = decoder.read()
+            df = pd.DataFrame.from_records(messages['record_mesgs'])
+            date = pd.to_datetime(df['timestamp'])
+            dateDiff = date - date[0]
+            secs = dateDiff.astype(int)
+            df.index = (secs/(10**9)).astype(int)
+            df = df.drop(columns = ['timestamp'])
+            st.session_state['excel'] = df
+            st.session_state['uploaded'] = True
+            print(df)
+        except:
+            print('failed')
 
-    points_per_turn = total_points / num_turns
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        # Write each dataframe to a different worksheet.
+        st.session_state['excel'].to_excel(writer, sheet_name='Sheet1')
+        writer.close()
+        st.download_button(
+            label='Download Excel File',
+            data=buffer.getvalue(),
+            file_name="streamlit_run.xlsx",
+            mime='application/vnd.ms-excel',
+            disabled = not bool(st.session_state['uploaded'])
+        )
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+
+if __name__ == "__main__":
+    main()
