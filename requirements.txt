@@ -2,3 +2,4 @@ pandas
 streamlit
 garmin_fit_sdk 
 xlsxwriter
+openpyxl
