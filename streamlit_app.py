@@ -46,11 +46,13 @@ def main():
         # To read file as bytes:
         #try:
         for uploaded_file in uploaded_files:
+            print(uploaded_file.name)
             stream = Stream.from_bytes_io(uploaded_file)
             decoder = Decoder(stream)
             messages, _ = decoder.read()
             data = pd.DataFrame.from_records(messages['record_mesgs'])
-            st.session_state['excel'] = add2df(data, st.session_state['excel'])
+            filenumber = uploaded_file.name.split('_')[0]
+            st.session_state['excel'] = add2df(data, st.session_state['excel'], filenumber)
             st.session_state['uploaded'] = True
         #except:
         #    print('failed')
@@ -69,20 +71,27 @@ def main():
             disabled = not bool(st.session_state['uploaded'])
         )
 
-def add2df(data, dfOld):
+def add2df(data, dfOld, filenumber):
     date = pd.to_datetime(data['timestamp'])
     dateDiff = date - date[0]
     secs = dateDiff.astype(int)
     data.index = (secs/(10**9)).astype(int)
-    data = data.drop(columns = ['timestamp', 'distance', 'enhanced_speed', 'speed'])
-    df = spanTime(data)
+    if 'heart_rate' in data:
+        if 'cadence' in data:
+            data = data.loc[:, ['heart_rate', 'cadence']]
+        else:
+            data = data.loc[:, ['heart_rate']]
+        df = spanTime(data)
 
+        header = pd.MultiIndex.from_product([[filenumber],['hr','cadence']],names=['subject','measurement'])
+        df.columns = header
 
-    header = pd.MultiIndex.from_product([['nafn'],['hr','cadence']],names=['subject','measurement'])
-    df.columns = header
-    if dfOld.size != 0:
-        df = df.join(dfOld, how = 'outer')
-    return df
+        if dfOld.size != 0:
+            dfOld = dfOld.join(df, how = 'outer')
+        else:
+            dfOld = df
+
+    return dfOld
 
 
 
