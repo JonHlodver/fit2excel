@@ -1,6 +1,7 @@
 from collections import namedtuple
 import math
 import pandas as pd
+import numpy as np
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -37,28 +38,24 @@ st.markdown(
 
 
 def main():
-    st.session_state['excel'] = pd.DataFrame([1,2,3])
+    st.session_state['excel'] = pd.DataFrame([])
     st.session_state['uploaded'] = False
 
-    uploaded_file = st.file_uploader(label = "Fit file uploader", type='.fit')
-    if uploaded_file is not None:
+    uploaded_files = st.file_uploader(label = "Fit file uploader:", type='.fit', accept_multiple_files=True)
+    if uploaded_files is not None:
         # To read file as bytes:
-        try:
+        #try:
+        for uploaded_file in uploaded_files:
             stream = Stream.from_bytes_io(uploaded_file)
             decoder = Decoder(stream)
             messages, _ = decoder.read()
-            df = pd.DataFrame.from_records(messages['record_mesgs'])
-            date = pd.to_datetime(df['timestamp'])
-            dateDiff = date - date[0]
-            secs = dateDiff.astype(int)
-            df.index = (secs/(10**9)).astype(int)
-            df = df.drop(columns = ['timestamp'])
-            st.session_state['excel'] = df
+            data = pd.DataFrame.from_records(messages['record_mesgs'])
+            st.session_state['excel'] = add2df(data, st.session_state['excel'])
             st.session_state['uploaded'] = True
-            print(df)
-        except:
-            print('failed')
+        #except:
+        #    print('failed')
 
+    filename = st.text_input('Filename:', 'fit2excel')
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         # Write each dataframe to a different worksheet.
@@ -67,11 +64,36 @@ def main():
         st.download_button(
             label='Download Excel File',
             data=buffer.getvalue(),
-            file_name="streamlit_run.xlsx",
+            file_name=filename+'.xlsx',
             mime='application/vnd.ms-excel',
             disabled = not bool(st.session_state['uploaded'])
         )
 
+def add2df(data, dfOld):
+    date = pd.to_datetime(data['timestamp'])
+    dateDiff = date - date[0]
+    secs = dateDiff.astype(int)
+    data.index = (secs/(10**9)).astype(int)
+    data = data.drop(columns = ['timestamp', 'distance', 'enhanced_speed', 'speed'])
+    df = spanTime(data)
+
+
+    header = pd.MultiIndex.from_product([['nafn'],['hr','cadence']],names=['subject','measurement'])
+    df.columns = header
+    if dfOld.size != 0:
+        df = df.join(dfOld, how = 'outer')
+    return df
+
+
+
+def spanTime(df):
+    """
+    if samples are missing for some timepoints: add them as None
+    """
+    length = int(df.index.to_series().iloc[-1])
+    df = df[~df.index.duplicated(keep='first')]
+    df = df.reindex(range(length + 1), fill_value=np.nan)
+    return df
 
 
 if __name__ == "__main__":
