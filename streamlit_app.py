@@ -44,20 +44,18 @@ def main():
     uploaded_files = st.file_uploader(label = "Fit file uploader:", type='.fit', accept_multiple_files=True)
     if uploaded_files is not None:
         # To read file as bytes:
-        #try:
-        for uploaded_file in uploaded_files:
-            print(uploaded_file.name)
-            stream = Stream.from_bytes_io(uploaded_file)
-            decoder = Decoder(stream)
-            messages, _ = decoder.read()
-            data = pd.DataFrame.from_records(messages['record_mesgs'])
-            filenumber = uploaded_file.name.split('_')[0]
-            st.session_state['excel'] = add2df(data, st.session_state['excel'], filenumber)
-            st.session_state['uploaded'] = True
-        #except:
-        #    print('failed')
+        try:
+            for uploaded_file in uploaded_files:
+                stream = Stream.from_bytes_io(uploaded_file)
+                decoder = Decoder(stream)
+                messages, _ = decoder.read()
+                data = pd.DataFrame.from_records(messages['record_mesgs'])
+                filenumber = uploaded_file.name.split('_')[0]
+                st.session_state['excel'] = add2df(data, st.session_state['excel'], filenumber)
+                st.session_state['uploaded'] = True
+        except:
+            print('failed')
 
-    filename = st.text_input('Filename:', 'fit2excel')
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
         # Write each dataframe to a different worksheet.
@@ -66,7 +64,7 @@ def main():
         st.download_button(
             label='Download Excel File',
             data=buffer.getvalue(),
-            file_name=filename+'.xlsx',
+            file_name='fit2excel'+'.xlsx',
             mime='application/vnd.ms-excel',
             disabled = not bool(st.session_state['uploaded'])
         )
